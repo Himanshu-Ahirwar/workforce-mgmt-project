@@ -4,8 +4,6 @@ package com.railse.hiring.workforcemgmt.common.model.response;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import com.railse.hiring.workforcemgmt.common.exception.StatusCode;
-import com.railse.hiring.workforcemgmt.common.model.response.Pagination;
-import com.railse.hiring.workforcemgmt.common.model.response.ResponseStatus;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 

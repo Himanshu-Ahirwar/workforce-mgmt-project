@@ -73,6 +73,13 @@ public class InMemoryTaskRepository implements TaskRepository {
         return List.copyOf(taskStore.values());
     }
 
+    @Override
+    public List<TaskManagement> findByPriority(Priority priority) {
+        return taskStore.values().stream()
+                .filter(task -> task.getPriority() == priority)
+                .collect(Collectors.toList());
+    }
+
 
     @Override
     public List<TaskManagement> findByReferenceIdAndReferenceType(Long referenceId, ReferenceType referenceType) {

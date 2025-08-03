@@ -4,7 +4,9 @@ package com.railse.hiring.workforcemgmt.service.impl;
 import com.railse.hiring.workforcemgmt.common.exception.ResourceNotFoundException;
 import com.railse.hiring.workforcemgmt.dto.*;
 import com.railse.hiring.workforcemgmt.mapper.ITaskManagementMapper;
+import com.railse.hiring.workforcemgmt.model.TaskActivity;
 import com.railse.hiring.workforcemgmt.model.TaskManagement;
+import com.railse.hiring.workforcemgmt.model.enums.Priority;
 import com.railse.hiring.workforcemgmt.model.enums.Task;
 import com.railse.hiring.workforcemgmt.model.enums.TaskStatus;
 import com.railse.hiring.workforcemgmt.repository.TaskRepository;
@@ -13,6 +15,7 @@ import org.springframework.stereotype.Service;
 
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -30,11 +33,20 @@ public class TaskManagementServiceImpl implements TaskManagementService {
         this.taskMapper = taskMapper;
     }
 
+    private void addHistoryLog(TaskManagement task, String details) {
+        task.getActivities().add(new TaskActivity(TaskActivity.ActivityType.HISTORY, details, null, System.currentTimeMillis()));
+    }
 
     @Override
     public TaskManagementDto findTaskById(Long id) {
         TaskManagement task = taskRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Task not found with id: " + id));
+
+        // Sort activities chronologically before returning
+        if (task.getActivities() != null) {
+            task.getActivities().sort(Comparator.comparing(TaskActivity::getTimestamp));
+        }
+
         return taskMapper.modelToDto(task);
     }
 
@@ -44,6 +56,9 @@ public class TaskManagementServiceImpl implements TaskManagementService {
         List<TaskManagement> createdTasks = new ArrayList<>();
         for (TaskCreateRequest.RequestItem item : createRequest.getRequests()) {
             TaskManagement newTask = new TaskManagement();
+
+
+            newTask.setCreationTime(System.currentTimeMillis());
             newTask.setReferenceId(item.getReferenceId());
             newTask.setReferenceType(item.getReferenceType());
             newTask.setTask(item.getTask());
@@ -52,6 +67,7 @@ public class TaskManagementServiceImpl implements TaskManagementService {
             newTask.setTaskDeadlineTime(item.getTaskDeadlineTime());
             newTask.setStatus(TaskStatus.ASSIGNED);
             newTask.setDescription("New task created.");
+            addHistoryLog(newTask, "Task created and assigned to user " + item.getAssigneeId());
             createdTasks.add(taskRepository.save(newTask));
         }
         return taskMapper.modelListToDtoList(createdTasks);
@@ -65,18 +81,26 @@ public class TaskManagementServiceImpl implements TaskManagementService {
             TaskManagement task = taskRepository.findById(item.getTaskId())
                     .orElseThrow(() -> new ResourceNotFoundException("Task not found with id: " + item.getTaskId()));
 
+            // 1. Store the original status before making any changes.
+            TaskStatus originalStatus = task.getStatus();
 
+            // 2. Apply all updates from the request.
             if (item.getTaskStatus() != null) {
                 task.setStatus(item.getTaskStatus());
             }
             if (item.getDescription() != null) {
                 task.setDescription(item.getDescription());
             }
+
+            // 3. Now, compare the possibly new status with the original one.
+            if (item.getTaskStatus() != null && !item.getTaskStatus().equals(originalStatus)) {
+                addHistoryLog(task, "Status changed from " + originalStatus + " to " + item.getTaskStatus() + ".");
+            }
+
             updatedTasks.add(taskRepository.save(task));
         }
         return taskMapper.modelListToDtoList(updatedTasks);
     }
-
 
     @Override
     public String assignByReference(AssignByReferenceRequest request) {
@@ -115,34 +139,60 @@ public class TaskManagementServiceImpl implements TaskManagementService {
                 newTask.setStatus(TaskStatus.ASSIGNED);
                 taskRepository.save(newTask);
             }
-            }
+        }
         return "Tasks assigned successfully for reference " + request.getReferenceId();
     }
 
 
     @Override
     public List<TaskManagementDto> fetchTasksByDate(TaskFetchByDateRequest request) {
+        if (request.getAssigneeIds() == null || request.getAssigneeIds().isEmpty()) {
+            return new ArrayList<>();
+        }
         List<TaskManagement> tasks = taskRepository.findByAssigneeIdIn(request.getAssigneeIds());
 
 
-        // BUG #2 is here. It should filter out CANCELLED tasks but doesn't.
-        // BUG #2 Fix: Filter out CANCELLED tasks and apply date range.
-        List<TaskManagement> filteredTasks = tasks.stream()
+        return tasks.stream()
                 .filter(task -> {
-                    // Condition 1: Task status should not be CANCELLED
-                    boolean isNotCancelled = task.getStatus() != TaskStatus.CANCELLED;
 
-                    // Condition 2: Task deadline should be after or on the start date
-                    boolean isAfterStartDate = task.getTaskDeadlineTime() >= request.getStartDate();
+                    boolean isActive = task.getStatus() != TaskStatus.COMPLETED &&
+                            task.getStatus() != TaskStatus.CANCELLED;
 
-                    // Condition 3: Task deadline should be before or on the end date
-                    boolean isBeforeEndDate = task.getTaskDeadlineTime() <= request.getEndDate();
+                    if (!isActive || task.getCreationTime() == null) {
+                        return false;
+                    }
 
-                    return isNotCancelled && isAfterStartDate && isBeforeEndDate;
+                    return task.getCreationTime() <= request.getEndDate();
                 })
+                .map(taskMapper::modelToDto)
                 .collect(Collectors.toList());
+    }
+    @Override
+    public TaskManagementDto updateTaskPriority(Long taskId, Priority priority) {
+        TaskManagement task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new ResourceNotFoundException("Task not found with id: " + taskId));
+        addHistoryLog(task, "Priority changed from " + task.getPriority() + " to " + priority);
+        task.setPriority(priority);
+        taskRepository.save(task);
+        return taskMapper.modelToDto(task);
+    }
 
+    @Override
+    public List<TaskManagementDto> fetchTasksByPriority(Priority priority) {
+        List<TaskManagement> tasks = taskRepository.findByPriority(priority);
+        return taskMapper.modelListToDtoList(tasks);
+    }
 
-        return taskMapper.modelListToDtoList(filteredTasks);
+    public TaskManagementDto addCommentToTask(Long taskId, Long authorId, String text) {
+        TaskManagement task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new ResourceNotFoundException("Task not found with id: " + taskId));
+
+        TaskActivity comment = new TaskActivity(TaskActivity.ActivityType.COMMENT, text, authorId, System.currentTimeMillis());
+        task.getActivities().add(comment);
+
+        taskRepository.save(task);
+        return taskMapper.modelToDto(task);
     }
 }
+
+

@@ -1,7 +1,9 @@
 package com.railse.hiring.workforcemgmt.mapper;
 
 
+import com.railse.hiring.workforcemgmt.dto.TaskActivityDto;
 import com.railse.hiring.workforcemgmt.dto.TaskManagementDto;
+import com.railse.hiring.workforcemgmt.model.TaskActivity;
 import com.railse.hiring.workforcemgmt.model.TaskManagement;
 import org.mapstruct.Mapper;
 import org.mapstruct.NullValuePropertyMappingStrategy;
@@ -23,4 +25,6 @@ public interface ITaskManagementMapper {
 
 
     List<TaskManagementDto> modelListToDtoList(List<TaskManagement> models);
+
+    TaskActivityDto activityToDto(TaskActivity model);
 }

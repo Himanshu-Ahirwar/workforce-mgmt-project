@@ -3,6 +3,8 @@ package com.railse.hiring.workforcemgmt.controller;
 
 import com.railse.hiring.workforcemgmt.common.model.response.Response;
 import com.railse.hiring.workforcemgmt.dto.*;
+import com.railse.hiring.workforcemgmt.dto.*;
+import com.railse.hiring.workforcemgmt.model.enums.Priority;
 import com.railse.hiring.workforcemgmt.service.TaskManagementService;
 import org.springframework.web.bind.annotation.*;
 
@@ -28,6 +30,11 @@ public class TaskManagementController {
         return new Response<>(taskManagementService.findTaskById(id));
     }
 
+    @GetMapping("/priority/{priority}")
+    public Response<List<TaskManagementDto>> getTasksByPriority(@PathVariable Priority priority) {
+        return new Response<>(taskManagementService.fetchTasksByPriority(priority));
+    }
+
 
     @PostMapping("/create")
     public Response<List<TaskManagementDto>> createTasks(@RequestBody TaskCreateRequest request) {
@@ -51,4 +58,20 @@ public class TaskManagementController {
     public Response<List<TaskManagementDto>> fetchByDate(@RequestBody TaskFetchByDateRequest request) {
         return new Response<>(taskManagementService.fetchTasksByDate(request));
     }
+
+    @PostMapping("/{id}/comments")
+    public Response<TaskManagementDto> addComment(
+            @PathVariable Long id,
+            @RequestBody CreateCommentRequest request) {
+        // In a real app, authorId would come from security context
+        return new Response<>(taskManagementService.addCommentToTask(id, request.getAuthorId(), request.getText()));
+    }
+    @PutMapping("/{id}/priority")
+    public Response<TaskManagementDto> updatePriority(
+            @PathVariable Long id,
+            @RequestBody UpdatePriorityRequest request) {
+        return new Response<>(taskManagementService.updateTaskPriority(id, request.getPriority()));
+    }
+
+
 }

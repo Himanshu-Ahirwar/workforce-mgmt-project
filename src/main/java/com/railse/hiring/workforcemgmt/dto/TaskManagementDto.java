@@ -9,12 +9,15 @@ import com.railse.hiring.workforcemgmt.model.enums.Task;
 import com.railse.hiring.workforcemgmt.model.enums.TaskStatus;
 import lombok.Data;
 
+import java.util.List;
+
 
 @Data
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public class TaskManagementDto {
     private Long id;
     private Long referenceId;
+    private Long creationTime;
     private ReferenceType referenceType;
     private Task task;
     private String description;
@@ -22,4 +25,5 @@ public class TaskManagementDto {
     private Long assigneeId;
     private Long taskDeadlineTime;
     private Priority priority;
+    private List<TaskActivityDto> activities;
 }
